@@ -183,11 +183,11 @@ end
 
 ## PERIODOGRAMS
 abstract type TFR{T} end
-struct Periodogram{T,F<:Union{Frequencies,AbstractRange}} <: TFR{T}
+struct Periodogram{T,F<:Union{Util.Frequencies,AbstractRange}} <: TFR{T}
     power::Vector{T}
     freq::F
 end
-struct Periodogram2{T,F1<:Union{Frequencies,AbstractRange},F2<:Union{Frequencies,AbstractRange}} <: TFR{T}
+struct Periodogram2{T,F1<:Union{Util.Frequencies,AbstractRange},F2<:Union{Util.Frequencies,AbstractRange}} <: TFR{T}
     power::Matrix{T}
     freq1::F1
     freq2::F2
@@ -217,13 +217,13 @@ See also: [`fftfreq`](@ref), [`rfftfreq`](@ref)
 """
 freq(p::TFR) = p.freq
 freq(p::Periodogram2) = (p.freq1, p.freq2)
-FFTW.fftshift(p::Periodogram{T,F}) where {T,F<:Frequencies} =
+FFTW.fftshift(p::Periodogram{T,F}) where {T,F<:Util.Frequencies} =
     Periodogram(p.freq.nreal == p.freq.n ? p.power : fftshift(p.power), fftshift(p.freq))
 FFTW.fftshift(p::Periodogram{T,F}) where {T,F<:AbstractRange} = p
 # 2-d
-FFTW.fftshift(p::Periodogram2{T,F1,F2}) where {T,F1<:Frequencies,F2<:Frequencies} =
+FFTW.fftshift(p::Periodogram2{T,F1,F2}) where {T,F1<:Util.Frequencies,F2<:Util.Frequencies} =
     Periodogram2(p.freq1.nreal == p.freq1.n ? fftshift(p.power,2) : fftshift(p.power), fftshift(p.freq1), fftshift(p.freq2))
-FFTW.fftshift(p::Periodogram2{T,F1,F2}) where {T,F1<:AbstractRange,F2<:Frequencies} =
+FFTW.fftshift(p::Periodogram2{T,F1,F2}) where {T,F1<:AbstractRange,F2<:Util.Frequencies} =
     Periodogram2(fftshift(p.power,2), p.freq1, fftshift(p.freq2))
 FFTW.fftshift(p::Periodogram2{T,F1,F2}) where {T,F1<:AbstractRange,F2<:AbstractRange} = p
 
@@ -274,7 +274,7 @@ function periodogram(s::AbstractVector{T}; onesided::Bool=eltype(s)<:Real,
     s_fft = T <: Real ? rfft(input) : fft(input)
     Periodogram(fft2pow!(zeros(fftabs2type(T), onesided ? (nfft >> 1)+1 : nfft),
                          s_fft, nfft, fs*norm2, onesided),
-                onesided ? rfftfreq(nfft, fs) : fftfreq(nfft, fs))
+                onesided ? Util.rfftfreq(nfft, fs) : Util.fftfreq(nfft, fs))
 end
 
 # Compute the periodogram of a 2-d signal S. Returns 1/N*X[s(n)]^2, where X is the 2-d
@@ -332,12 +332,12 @@ function periodogram(s::AbstractMatrix{T};
         s_fft = fft(input)
         out = zeros(fftabs2type(T), nfft)
         fft2pow2!(out,s_fft,nfft...,fs*norm2)
-        return Periodogram2(out, fftfreq(nfft[1],fs), fftfreq(nfft[2],fs))
+        return Periodogram2(out, Util.fftfreq(nfft[1],fs), Util.fftfreq(nfft[2],fs))
     else
         s_fft = rfft(input)
         out = zeros(fftabs2type(T), nmin>>1 + 1)
         fft2pow2radial!(out,s_fft,nfft...,fs*norm2, ptype)
-        return Periodogram(out, Frequencies(length(out), length(out), fs/nmin))
+        return Periodogram(out, Util.Frequencies(length(out), length(out), fs/nmin))
     end
 end
 
@@ -379,7 +379,7 @@ function welch_pgram(s::AbstractVector{T}, n::Int=length(s)>>3, noverlap::Int=n>
         fft2pow!(out, tmp, nfft, r, onesided)
     end
 
-    Periodogram(out, onesided ? rfftfreq(nfft, fs) : fftfreq(nfft, fs))
+    Periodogram(out, onesided ? Util.rfftfreq(nfft, fs) : Util.fftfreq(nfft, fs))
 end
 
 """
@@ -427,7 +427,7 @@ function mt_pgram(s::AbstractVector{T}; onesided::Bool=eltype(s)<:Real,
         fft2pow!(out, tmp, nfft, r, onesided)
     end
 
-    Periodogram(out, onesided ? rfftfreq(nfft, fs) : fftfreq(nfft, fs))
+    Periodogram(out, onesided ? Util.rfftfreq(nfft, fs) : Util.fftfreq(nfft, fs))
 end
 
 ## SPECTROGRAM
@@ -436,12 +436,12 @@ end
     const FloatRange{T} = StepRangeLen{T,Base.TwicePrecision{T},Base.TwicePrecision{T}}
 end
 
-struct Spectrogram{T,F<:Union{Frequencies,AbstractRange}} <: TFR{T}
+struct Spectrogram{T,F<:Union{Util.Frequencies,AbstractRange}} <: TFR{T}
     power::Matrix{T}
     freq::F
     time::FloatRange{Float64}
 end
-FFTW.fftshift(p::Spectrogram{T,F}) where {T,F<:Frequencies} =
+FFTW.fftshift(p::Spectrogram{T,F}) where {T,F<:Util.Frequencies} =
     Spectrogram(p.freq.nreal == p.freq.n ? p.power : fftshift(p.power, 1), fftshift(p.freq), p.time)
 FFTW.fftshift(p::Spectrogram{T,F}) where {T,F<:AbstractRange} = p
 
@@ -465,7 +465,7 @@ function spectrogram(s::AbstractVector{T}, n::Int=length(s)>>3, noverlap::Int=n>
                      window::Union{Function,AbstractVector,Nothing}=nothing) where T
 
     out = stft(s, n, noverlap, PSDOnly(); onesided=onesided, nfft=nfft, fs=fs, window=window)
-    Spectrogram(out, onesided ? rfftfreq(nfft, fs) : fftfreq(nfft, fs),
+    Spectrogram(out, onesided ? Util.rfftfreq(nfft, fs) : Util.fftfreq(nfft, fs),
                 (n/2 : n-noverlap : (size(out,2)-1)*(n-noverlap)+n/2) / fs)
 
 end
